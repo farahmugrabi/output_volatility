@@ -29,3 +29,9 @@ Please download the following folders and scripts. The files and directories are
 3. Run ▶️ the scripts in the following order:
   - Output_volatility.R
 5. Notes 📝:
+
+#Methodological Note:
+The scatter plot shows the relationship between the average year-on-year growth rate, on the x-axis, and the standard deviation of year-on-year growth rates, on the y-axis. The sample covers the period from 1999Q1 to 2025Q1, excluding the quarters corresponding to the COVID-19 period (observations between 2020-01-01 and 2021-01-01).¹
+
+Footnote:
+Data: (1) Demand: Total final domestic demand from the ECB. For Ireland, Modified Final Domestic Demand from the CSO. (2) Investment: Gross fixed capital formation, total – all activities, quarterly. (3) Output: Gross domestic product at market prices, Euro area 20 (fixed composition). All series are expressed in real terms, deflated with the monthly HICP overall index. The HICP was converted to quarterly frequency using the simple average within each quarter, specific to each country. EU (I8) corresponds to the Euro Area 19 countries average.

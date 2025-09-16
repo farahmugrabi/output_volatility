@@ -340,17 +340,17 @@ changeset<- 1
 outputvol_data <- data %>%
   group_by(ISO2) %>%
   arrange(Date, .by_group = TRUE) %>%
-  mutate(gdp_growth = 100 * (GDP / lag(GDP,year_set) - 1)) %>%          
+  mutate(gdp_growth = 100 * (GDP_r / lag(GDP_r,year_set) - 1)) %>%          
   mutate(output_mean = rollapply(data = gdp_growth, widt = 4*year_set, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
   mutate(output_sd = rollapply(data = gdp_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
-  mutate(ouput_z_score = (GDP - output_mean) / output_sd) %>%
+  mutate(ouput_z_score = (GDP_r - output_mean) / output_sd) %>%
   ungroup()
 
 outputvol_data<-  outputvol_data %>%
   group_by(ISO2) %>%
   arrange(Date, .by_group = TRUE) %>%
-  mutate(INV_growth = 100 * (INV / lag(INV,year_set) - 1)) %>%    
-  mutate(DEM_growth = 100 * (DEM / lag(DEM,year_set) - 1)) %>% 
+  mutate(INV_growth = 100 * (INV_r / lag(INV_r,year_set) - 1)) %>%    
+  mutate(DEM_growth = 100 * (DEM_r / lag(DEM_r,year_set) - 1)) %>% 
   # mutate(INV_sd = rollapply(data = INV_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
   # mutate(DEM_sd = rollapply(data = DEM_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
   mutate(INV_mean = rollapply(data = INV_growth, width = 4*year_set, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
@@ -488,9 +488,16 @@ ggsave(paste0(path,"/B.Results/Plots/plot_relative_demvol.pdf"), plot_diff_dem, 
 ggsave(filename = file.path(path, "B.Results/Plots/plot_relative_demvol.png"),plot= plot_diff_dem,height   = 20, width    = 25, dpi      = 300)
 
 #Scarlett plots---------------------------------------
+# plotdata<- plotdata %>%  mutate(ISO2= ifelse(ISO2=="I8", 'EU Average (I8)',ISO2 ))
+plotdata <- plotdata %>%
+  mutate(ISO2 = as.character(ISO2),
+         ISO2 = ifelse(ISO2 == "I8", "EU (I8)", ISO2),
+         ISO2 = factor(ISO2))
+
 #Scarlett relative Demand---
+
 scatter_plot_data<- plotdata %>% 
-  mutate(DEM_growth_yoy=DEM/lag(DEM,4)-1) %>% 
+  mutate(DEM_growth_yoy=DEM_r/lag(DEM_r,4)-1) %>% 
   filter(Date>="1999-1-1") %>% 
   filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
   filter(!ISO2 %in% c("IE_GNI", "U2")) %>%  
@@ -528,7 +535,7 @@ ggsave(filename = file.path(path, "B.Results/Plots/demand_full.png"),plot= p_sca
 
 #Pre GFC
 scatter_plot_data<- plotdata %>% 
-  mutate(DEM_growth_yoy=DEM/lag(DEM,4)-1) %>% 
+  mutate(DEM_growth_yoy=DEM_r/lag(DEM_r,4)-1) %>% 
   filter(Date>="1999-1-1") %>% 
   filter(Date<="2007-1-1") %>% 
   filter(!ISO2 %in% c("IE_GNI", "U2")) %>%  
@@ -566,7 +573,7 @@ ggsave(filename = file.path(path, "B.Results/Plots/demand_pre_GFC.png"),plot= p_
 
 #Post GFC
 scatter_plot_data<- plotdata %>% 
-  mutate(DEM_growth_yoy=DEM/lag(DEM,4)-1) %>% 
+  mutate(DEM_growth_yoy=DEM_r/lag(DEM_r,4)-1) %>% 
   filter(Date>="2010-1-1") %>% 
   filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
   filter(!ISO2 %in% c("IE_GNI", "U2")) %>%  
@@ -603,7 +610,7 @@ ggsave(filename = file.path(path, "B.Results/Plots/demand_post_GFC.png"),plot= p
 
 #Scarlett relative Output---
 scatter_plot_data<- plotdata %>% 
-  mutate(Output_growth_yoy=GDP/lag(GDP,4)-1) %>% 
+  mutate(Output_growth_yoy=GDP_r/lag(GDP_r,4)-1) %>% 
   filter(Date>="1999-1-1") %>%
   filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
   filter(!ISO2 %in% c("U2")) %>%  
@@ -643,7 +650,7 @@ ggsave(filename = file.path(path, "B.Results/Plots/gdp_scatter.png"),plot= p_sca
 
 #Scarlett relative Investment---
 scatter_plot_data<- plotdata %>% 
-  mutate(INV_growth_yoy=INV/lag(INV,4)-1) %>% 
+  mutate(INV_growth_yoy=INV_r/lag(INV_r,4)-1) %>% 
   filter(Date>="2000-1-1") %>% 
   filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
   filter(!ISO2 %in% c("U2")) %>%  
