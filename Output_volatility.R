@@ -12,6 +12,7 @@ library(ecb)
 library(openxlsx)
 library(stringr)
 library(forecast)
+library(writexl)
 
 #Paths and folders
 rm(list = ls())
@@ -21,6 +22,8 @@ getwd()
 
 dir.create(file.path(path, "B_Results", "Plots"), recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(path, "B_Results", "Tables"), recursive = TRUE, showWarnings = FALSE)
+source('ECB_get_data.R')
+ecb_api = "https://data-api.ecb.europa.eu/service/data" 
 
 #Irish GNI
 #GNI----------------
@@ -190,5 +193,70 @@ ggsave(paste0(path,"/B_Results/Plots/GNI.pdf"), GNI_plot, height = 20, width = 2
 ggsave(paste0(path,"/B_Results/Plots/GNI_yoy.pdf"), GNI_yoy_plot, height = 20, width = 25)
 ggsave(paste0(path,"/B_Results/Plots/GNI_r.pdf"), GNI_r_plot, height = 20, width = 25)
 
-#EU countries
-data_eu<- 
+#EU countries--------------------------------------------------------------------
+EA_countries <- c("AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "IE", "IT", "LU", "LT", "LV", "MT", "NL", "PT", "SI", "SK")
+countrycode(EA_countries, origin = "iso2c", destination = 'country.name')
+
+countries <- c(EA_countries, "I8", "U2") #@Select countries 
+countries <- c(EA_countries, "U2") #@Select countries 
+
+## GDP (level)
+gdp_keys <- readxl::read_xlsx(paste0(path,"/A.data/Series_Keys.xlsx"), sheet = "GDP") %>% 
+  filter(Country %in% countries)
+
+gdp<- list()  
+for(i in 1:length(gdp_keys$Key)){
+  gdp[[i]] = get_data(ecb_api, gdp_keys$Key[i])}
+
+gdp<- bind_rows(gdp) %>% 
+  dplyr::select(ref_area, obstime, obsvalue) %>% 
+  rename(ISO2 = ref_area, Date = obstime, GDP = obsvalue) %>% 
+  mutate(Date = as.Date(as.yearqtr(Date, format = "%Y-Q%q"))) 
+
+## Inflation (CPI - Percentage change)
+cpi_keys <- readxl::read_xlsx(paste0(path,"/A.data/Series_Keys.xlsx"), sheet = "CPI") %>% 
+  filter(Country %in% countries)
+
+cpi<- list()  
+for(i in 1:length(cpi_keys$Key)){
+  cpi[[i]] = get_data(ecb_api, cpi_keys$Key[i])}
+
+cpi <- cpi %>% 
+  bind_rows() %>% 
+  dplyr::select(ref_area, obstime, obsvalue) %>% 
+  rename(ISO2 = ref_area, Date = obstime, CPI = obsvalue) %>% 
+  mutate(Date = as.Date(as.yearqtr(Date, format = "%Y-%m")))%>% 
+  group_by(ISO2, Date) %>% 
+  summarise(CPI = mean(CPI, na.rm = TRUE), .groups = "drop") %>% 
+  arrange(ISO2, Date)
+
+data <- gdp %>%
+  inner_join(cpi, by = c("ISO2", "Date")) %>% 
+  mutate(GDP_r=GDP / (1 + CPI/100)) %>% 
+  arrange(ISO2, Date)
+
+
+outputvol_data <- data %>%
+  group_by(ISO2) %>%
+  arrange(Date, .by_group = TRUE) %>%
+  mutate(output_mean = rollapply(data = GDP_r, width = 8, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(output_vol = rollapply(data = output_mean, width = 8, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  ungroup()
+
+#Plot----------
+outputvol_data %>% 
+  dplyr::filter(ISO2 %in% c('IE', 'U2', 'FR','DE', 'ES', 'IT')) %>% 
+  dplyr::filter(Date >'2015-01-01') %>% 
+ggplot(., aes(x = Date, y = output_vol, color = ISO2, group = ISO2)) +
+  geom_line(na.rm = TRUE, linewidth = 0.7) +
+  labs(
+    title = "Output volatility (rolling 8 quarters standard deviation)",
+    x = "Date (trimestre)",
+    y = "Desviación estándar de GDP_r (8Q)",
+    color = "País"
+  ) +
+  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+
