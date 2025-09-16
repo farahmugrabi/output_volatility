@@ -13,6 +13,7 @@ library(openxlsx)
 library(stringr)
 library(forecast)
 library(writexl)
+library(countrycode)
 
 #Paths and folders
 rm(list = ls())
@@ -20,15 +21,15 @@ path = dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(path)
 getwd()
 
-dir.create(file.path(path, "B_Results", "Plots"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(path, "B_Results", "Tables"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(path, "B.Results", "Plots"), recursive = TRUE, showWarnings = FALSE)
+dir.create(file.path(path, "B.Results", "Tables"), recursive = TRUE, showWarnings = FALSE)
 source('ECB_get_data.R')
 ecb_api = "https://data-api.ecb.europa.eu/service/data" 
 
-#Irish GNI
+#Irish GNI----------------------------------------------
 #GNI----------------
 #Yearly GNI
-GNI<- cso_get_data('NA001', pivot_format = "tall", use_dates = TRUE, use_factors = FALSE, cache = FALSE) %>% 
+GNI<- csodata::cso_get_data('NA001', pivot_format = "tall", use_dates = TRUE, use_factors = FALSE, cache = FALSE) %>% 
   filter(Item=='10. Modified gross national income at current market prices')%>%
   filter(Statistic== 'Modified Gross National Income at Current Market Prices') %>% 
   dplyr::select(Year,value) %>% 
@@ -131,7 +132,7 @@ CPI_all_q<- CPI_all %>%
 data<-merge.data.frame(data, CPI_all_q, by='Date')
 
 #Compute Q-O-Q change
-data<- data %>% 
+data_gni<- data %>% 
   mutate(GNI_cl_qoq=(GNI_cl/lag(GNI_cl)-1)) %>% 
   mutate(GNIq_qoq=(GNIq/lag(GNIq)-1)) %>% 
   mutate(GNI_lcl= log10(GNI_cl/1000)) %>% 
@@ -142,7 +143,7 @@ data<- data %>%
   mutate(GNI_rq= (GNIq*CPI))
 
 #Plots
-GNI_plot<- ggplot(data=data, aes(x=Date))+
+GNI_plot<- ggplot(data=data_gni, aes(x=Date))+
   geom_line(aes(y=GNI_cl/1000, color='Chow-Li'), size=1.5)+
   geom_line(aes(y=GNIq/1000, color='Linear'), size=1.5) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -157,7 +158,7 @@ GNI_plot<- ggplot(data=data, aes(x=Date))+
         axis.title=element_text(size=50),
         legend.text =element_text(size=50))
 
-GNI_r_plot<- ggplot(data=data, aes(x=Date))+
+GNI_r_plot<- ggplot(data=data_gni, aes(x=Date))+
   geom_line(aes(y=GNI_rlcl, color='Chow-Li'), size=1.5)+
   geom_line(aes(y=GNI_rlq, color='Linear'), size=1.5) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -172,7 +173,7 @@ GNI_r_plot<- ggplot(data=data, aes(x=Date))+
         axis.title=element_text(size=50),
         legend.text =element_text(size=50))
 
-GNI_yoy_plot<- ggplot(data=data, aes(x=Date))+
+GNI_yoy_plot<- ggplot(data=data_gni, aes(x=Date))+
   geom_line(aes(y=GNI_cl_qoq, color='Chow-Li'), size=1.5)+
   geom_line(aes(y=GNIq_qoq, color='Linear'), size=1.5) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -187,18 +188,21 @@ GNI_yoy_plot<- ggplot(data=data, aes(x=Date))+
         axis.title=element_text(size=50),
         legend.text =element_text(size=50))
 
-chowlinvslinear<- (sd(data$GNIq_qoq,na.rm = T)-sd(data$GNI_cl_qoq,na.rm = T))*100 #dispersion of linear interpolation is x percentage points above the one obtained with Chow-Li
+chowlinvslinear<- (sd(data_gni$GNIq_qoq,na.rm = T)-sd(data_gni$GNI_cl_qoq,na.rm = T))*100 #dispersion of linear interpolation is x percentage points above the one obtained with Chow-Li
 
-ggsave(paste0(path,"/B_Results/Plots/GNI.pdf"), GNI_plot, height = 20, width = 25)
-ggsave(paste0(path,"/B_Results/Plots/GNI_yoy.pdf"), GNI_yoy_plot, height = 20, width = 25)
-ggsave(paste0(path,"/B_Results/Plots/GNI_r.pdf"), GNI_r_plot, height = 20, width = 25)
+ggsave(paste0(path,"/B.Results/Plots/GNI.pdf"), GNI_plot, height = 20, width = 25)
+ggsave(paste0(path,"/B.Results/Plots/GNI_yoy.pdf"), GNI_yoy_plot, height = 20, width = 25)
+ggsave(paste0(path,"/B.Results/Plots/GNI_r.pdf"), GNI_r_plot, height = 20, width = 25)
+
+
+#GNI --------------------------------
+# data_gni<-read.csv(paste0(path,"/A.Data/", "data_full.csv"))[,c('Date', 'GNI_rcl')]
 
 #EU countries--------------------------------------------------------------------
 EA_countries <- c("AT", "BE", "CY", "DE", "EE", "ES", "FI", "FR", "GR", "IE", "IT", "LU", "LT", "LV", "MT", "NL", "PT", "SI", "SK")
 countrycode(EA_countries, origin = "iso2c", destination = 'country.name')
-
 countries <- c(EA_countries, "I8", "U2") #@Select countries 
-countries <- c(EA_countries, "U2") #@Select countries 
+countries <- c(EA_countries, "I8","U2") #@Select countries 
 
 ## GDP (level)
 gdp_keys <- readxl::read_xlsx(paste0(path,"/A.data/Series_Keys.xlsx"), sheet = "GDP") %>% 
@@ -235,28 +239,132 @@ data <- gdp %>%
   mutate(GDP_r=GDP / (1 + CPI/100)) %>% 
   arrange(ISO2, Date)
 
+#GNI for IE
+data_gni <- data_gni %>%
+  mutate(Date = as.Date(Date))
 
+ie_gni_rows <- data_gni %>%
+  transmute(
+    ISO2   = "IE_GNI",
+    Date,
+    GDP    = NA_real_,
+    GDP  = GNI_cl)%>%
+  mutate(Date = as.Date(Date))
+
+ie_cpi <- cpi %>%
+  filter(ISO2 == "IE") %>%
+  group_by(Date) %>%
+  summarise(CPI = first(CPI), .groups = "drop")%>%
+  mutate(Date = as.Date(Date))
+
+ie_gni_rows <- ie_gni_rows %>%
+  left_join(ie_cpi, by = "Date") %>% 
+  mutate(GDP_r=GDP / (1 + CPI/100)) %>% 
+  mutate(Date = as.Date(Date))
+
+data <- data %>%
+  bind_rows(ie_gni_rows) %>%
+  arrange(ISO2, Date)
+
+#Output volatility------------------------------------------------
+#Defined as the 8 quarters rolling standard deviation of the real GDP growth
 outputvol_data <- data %>%
   group_by(ISO2) %>%
   arrange(Date, .by_group = TRUE) %>%
-  mutate(output_mean = rollapply(data = GDP_r, width = 8, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
-  mutate(output_vol = rollapply(data = output_mean, width = 8, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(gdp_growth = 100 * (GDP_r / lag(GDP_r) - 1)) %>%          
+  mutate(output_mean = rollapply(data = gdp_growth, widt = 8, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(output_sd = rollapply(data = gdp_growth, width = 8, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(ouput_z_score = (GDP_r - output_mean) / output_sd) %>%
   ungroup()
 
+ref_u2 <- outputvol_data %>%
+  filter(ISO2 == "U2") %>%
+  select(Date, output_vol_U2 = output_sd)
+
+outputvol_data <- outputvol_data %>%
+  left_join(ref_u2, by = "Date") %>%
+  mutate(
+    output_vol_rel = if_else(!is.na(output_vol_U2) & output_vol_U2 != 0,
+                             output_sd / output_vol_U2, 
+                             NA_real_)) %>%
+  arrange(ISO2, Date)
+
 #Plot----------
-outputvol_data %>% 
-  dplyr::filter(ISO2 %in% c('IE', 'U2', 'FR','DE', 'ES', 'IT')) %>% 
-  dplyr::filter(Date >'2015-01-01') %>% 
-ggplot(., aes(x = Date, y = output_vol, color = ISO2, group = ISO2)) +
-  geom_line(na.rm = TRUE, linewidth = 0.7) +
+
+cbi_palette = c("#0B5471", "#7C477E", "#0083A0", "#5EC5C2", "#D2E288", "#007DC5", "#D12E7C", "#F57D20", "#FCAF17", "#DFCA94", "#000000", "#7e878e")
+iso_levels <- sort(unique(outputvol_data$ISO2))
+pal_all <- setNames(rep(cbi_palette, length.out = length(iso_levels)), iso_levels)
+outputvol_data <- outputvol_data %>%
+  mutate(ISO2 = factor(ISO2, levels = iso_levels))
+
+plotdata<- outputvol_data %>% 
+  dplyr::filter(Date >'2000-01-01') 
+
+min_d <- floor_date(min(plotdata$Date, na.rm = TRUE), unit = "quarter")
+max_d <- ceiling_date(max(plotdata$Date, na.rm = TRUE), unit = "quarter")
+breaks_q <- label_quarter <- function(x) paste0(year(x), " Q", quarter(x))
+label_quarter <- function(x) paste0(year(x), " Q", quarter(x))
+
+plot_outputvol<- plotdata %>% 
+  dplyr::filter(ISO2 %in% c('IE','IE_GNI', 'U2','DE')) %>% 
+  ggplot(., aes(x = Date, y = output_sd, color = ISO2, group = ISO2)) +
+  geom_line(na.rm = TRUE, linewidth = 1.5) +
   labs(
     title = "Output volatility (rolling 8 quarters standard deviation)",
-    x = "Date (trimestre)",
-    y = "Desviación estándar de GDP_r (8Q)",
-    color = "País"
-  ) +
-  scale_x_date(date_breaks = "2 years", date_labels = "%Y") +
+    x = "Date", y = "Output volatility", color = "Country") +
+  scale_x_date( date_breaks = "2 years", labels  = label_quarter, limits = c(min_d, max_d),
+    expand = expansion(mult = c(0.01, 0.03)))+
   theme_minimal(base_size = 12) +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position="bottom",legend.title = element_text(size = 8)) +
+  scale_color_manual(values = pal_all) +
+  scale_linewidth_manual(values = c("IE_GNI" = 5), guide = "none")+
+  guides(color = guide_legend(title = ""))+
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50),
+        axis.text.x       = element_text(angle = 45, hjust = 1, vjust = 1))
+ggsave(paste0(path,"/B.Results/Plots/plot_ouputvol.pdf"), plot_outputvol, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/plot_outputvol.png"),plot= plot_outputvol,height   = 20, width    = 25, dpi      = 300)
 
+plot_outputvol
+
+#Plot relative---
+iso_subset <- c('U2', "IE_GNI",'ES','FR','DE',"GR","BE")
+lty_all <- setNames(rep("solid", length(iso_subset)), iso_subset)
+lty_all["IE_GNI"] <- "dashed"   # o "dotted", "longdash", etc.
+lab_all <- setNames(iso_subset, iso_subset)
+lab_all["U2"] <- "Euro area (changing composition, U2)"
+
+plot_diff<- plotdata %>% 
+  dplyr::filter(ISO2 %in% iso_subset) %>% 
+  ggplot(., aes(x = Date, y = output_vol_rel, color = ISO2, linetype = ISO2, group = ISO2)) +
+  geom_line(na.rm = TRUE, linewidth = 1.5) +
+  labs(
+    title = "Output volatility Relative to Euro Area",
+    x = "Date",y = "Output volatility",color = "Country") +
+  scale_x_date( date_breaks = "2 years", labels  = label_quarter, limits = c(min_d, max_d),
+                expand = expansion(mult = c(0.01, 0.03)))+
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position="bottom",legend.title = element_text(size = 8)) +
+  scale_color_manual(values = pal_all, labels = lab_all) +
+  scale_linetype_manual(values = lty_all, guide = "none") +  
+  guides(color = guide_legend(title = ""))+
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50),
+        axis.text.x       = element_text(angle = 45, hjust = 1, vjust = 1))
+ggsave(paste0(path,"/B.Results/Plots/plot_relative_ouputvol.pdf"), plot_diff, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/plot_relative_outputvol.png"),plot     = plot_diff,height   = 20, width    = 25, dpi      = 300)
+
+plot_diff
 
