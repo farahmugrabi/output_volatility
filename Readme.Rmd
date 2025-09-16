@@ -26,14 +26,13 @@ If you use this code, please cite both the GitHub repository and the related art
 
 # 📂 Download & Structure  
 Please download the following folders and scripts. The files and directories are the following:
-
+- Output_volatility.R (master)
+- ECB_get_data.R (utils)
+- Data/Series_Keys.xlsx and Data/Data_pre.xlsx
 
 # ⚙️ Instructions:
 1. Download the full folder, do not change the location of the files or names.
 2. Follow @ to locate configurable options.
 3. Run ▶️ the scripts in the following order:
-  - B.Data/0.Data.R
-  - A.Main_Code/GF3_S23_US_FIX_DYN_pars
-  - C.Properties/C1.Bank_crisis.R
-  - C.Properties/C2.Properties.R
+  - Output_volatility.R
 5. Notes 📝:

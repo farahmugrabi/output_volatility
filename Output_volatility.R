@@ -272,8 +272,8 @@ outputvol_data <- data %>%
   group_by(ISO2) %>%
   arrange(Date, .by_group = TRUE) %>%
   mutate(gdp_growth = 100 * (GDP_r / lag(GDP_r) - 1)) %>%          
-  mutate(output_mean = rollapply(data = gdp_growth, widt = 8, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
-  mutate(output_sd = rollapply(data = gdp_growth, width = 8, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(output_mean = rollapply(data = gdp_growth, widt = 4*5, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(output_sd = rollapply(data = gdp_growth, width = 4*5, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
   mutate(ouput_z_score = (GDP_r - output_mean) / output_sd) %>%
   ungroup()
 
@@ -298,7 +298,7 @@ outputvol_data <- outputvol_data %>%
   mutate(ISO2 = factor(ISO2, levels = iso_levels))
 
 plotdata<- outputvol_data %>% 
-  dplyr::filter(Date >'2000-01-01') 
+  dplyr::filter(Date >'1995-01-01') 
 
 min_d <- floor_date(min(plotdata$Date, na.rm = TRUE), unit = "quarter")
 max_d <- ceiling_date(max(plotdata$Date, na.rm = TRUE), unit = "quarter")
@@ -334,7 +334,7 @@ ggsave(filename = file.path(path, "B.Results/Plots/plot_outputvol.png"),plot= pl
 plot_outputvol
 
 #Plot relative---
-iso_subset <- c('U2', "IE_GNI",'ES','FR','DE',"GR","BE")
+iso_subset <- c('U2', "IE","IE_GNI",'ES','FR','DE',"GR","BE")
 lty_all <- setNames(rep("solid", length(iso_subset)), iso_subset)
 lty_all["IE_GNI"] <- "dashed"   # o "dotted", "longdash", etc.
 lab_all <- setNames(iso_subset, iso_subset)
