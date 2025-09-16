@@ -14,6 +14,7 @@ library(stringr)
 library(forecast)
 library(writexl)
 library(countrycode)
+library(ggrepel)
 
 #Paths and folders
 rm(list = ls())
@@ -57,6 +58,17 @@ MDD<-cso_get_data('NAQ05', pivot_format = "tall", use_dates = TRUE, use_factors 
   na.omit() %>% 
   mutate(MDD_4qra=lag0+lag1+lag2+lag3) %>% 
   dplyr::select(Year,MDD,MDD_4qra) 
+
+#Quarterly Modified Total Domestic Demand
+MDD_f<-cso_get_data('NAQ05', pivot_format = "tall", use_dates = TRUE, use_factors = FALSE, cache = FALSE) %>%  
+  filter(Sector=='Modified Final Domestic Demand')%>%
+  filter(Statistic== 'Modified Total Domestic Demand and Components of Modified Gross Domestic Fixed Capital Formation at Current Market Prices (Seasonally Adjusted)') %>%
+  dplyr::select(Year,value) %>% 
+  rename(MDD_f=value) %>%  
+  na.omit() %>% 
+  dplyr::select(Year,MDD_f) 
+
+MDD<- merge.data.frame(MDD, MDD_f, by="Year")
 
 #GNI quarterly linear interpolation
 data<- merge.data.frame(MDD,GNI, all.x = T, by= "Year") %>% 
@@ -239,6 +251,58 @@ data <- gdp %>%
   mutate(GDP_r=GDP / (1 + CPI/100)) %>% 
   arrange(ISO2, Date)
 
+#Investment
+inv_keys <- readxl::read_xlsx(paste0(path,"/A.data/Series_Keys.xlsx"), sheet = "Investment") %>% 
+  filter(ISO2 %in% countries)
+
+inv<- list()  
+for(i in 1:length(inv_keys$key)){
+  inv[[i]] = get_data(ecb_api, inv_keys$key[i])}
+
+inv <- inv %>% 
+  bind_rows() %>% 
+  dplyr::select(ref_area, obstime, obsvalue) %>% 
+  rename(ISO2 = ref_area, Date = obstime, inv = obsvalue) %>% 
+  mutate(Date = as.Date(as.yearqtr(Date, format = "%Y-Q%q"))) %>% 
+  group_by(ISO2, Date) %>% 
+  summarise(INV = mean(inv, na.rm = TRUE), .groups = "drop") %>% 
+  arrange(ISO2, Date)
+
+inv <- inv %>%
+  inner_join(cpi, by = c("ISO2", "Date")) %>% 
+  mutate(INV_r=INV / (1 + CPI/100)) %>% 
+  arrange(ISO2, Date) %>% 
+  dplyr::select(-CPI)
+
+#Demand
+dem_keys <- readxl::read_xlsx(paste0(path,"/A.data/Series_Keys.xlsx"), sheet = "Demand") %>% 
+  filter(ISO2 %in% countries)
+dem_keys$key[dem_keys$key == "MNA.Q.Y.U2.W0.S1.S1.D.P3T5._Z._Z._Z.EUR.V.N"] <- "MNA.Q.Y.I8.W0.S1.S1.D.P3T5._Z._Z._Z.EUR.V.N"
+dem_keys$ISO2[dem_keys$ISO2 == "U2"] <- "I8"
+
+dem<- list()  
+for(i in 1:length(dem_keys$key)){
+  dem[[i]] = get_data(ecb_api, dem_keys$key[i])}
+
+dem <- dem %>% 
+  bind_rows() %>% 
+  dplyr::select(ref_area, obstime, obsvalue) %>% 
+  rename(ISO2 = ref_area, Date = obstime, dem = obsvalue) %>% 
+  mutate(Date = as.Date(as.yearqtr(Date, format = "%Y-Q%q"))) %>% 
+  group_by(ISO2, Date) %>% 
+  summarise(DEM = mean(dem, na.rm = TRUE), .groups = "drop") %>% 
+  arrange(ISO2, Date)
+
+dem <- dem %>%
+  inner_join(cpi, by = c("ISO2", "Date")) %>% 
+  mutate(DEM_r=DEM / (1 + CPI/100)) %>% 
+  arrange(ISO2, Date) %>% 
+  dplyr::select(-CPI)
+
+data <- data %>%
+  left_join(inv, by = c("ISO2", "Date")) %>%
+  left_join(dem, by = c("ISO2", "Date"))
+
 #GNI for IE
 data_gni <- data_gni %>%
   mutate(Date = as.Date(Date))
@@ -248,7 +312,8 @@ ie_gni_rows <- data_gni %>%
     ISO2   = "IE_GNI",
     Date,
     GDP    = NA_real_,
-    GDP  = GNI_cl)%>%
+    GDP  = GNI_cl,
+    DEM  = MDD_f)%>%
   mutate(Date = as.Date(Date))
 
 ie_cpi <- cpi %>%
@@ -260,6 +325,7 @@ ie_cpi <- cpi %>%
 ie_gni_rows <- ie_gni_rows %>%
   left_join(ie_cpi, by = "Date") %>% 
   mutate(GDP_r=GDP / (1 + CPI/100)) %>% 
+  mutate(DEM_r=DEM / (1 + CPI/100)) %>% 
   mutate(Date = as.Date(Date))
 
 data <- data %>%
@@ -268,29 +334,53 @@ data <- data %>%
 
 #Output volatility------------------------------------------------
 #Defined as the 8 quarters rolling standard deviation of the real GDP growth
+year_set<-1
+changeset<- 1
+
 outputvol_data <- data %>%
   group_by(ISO2) %>%
   arrange(Date, .by_group = TRUE) %>%
-  mutate(gdp_growth = 100 * (GDP_r / lag(GDP_r) - 1)) %>%          
-  mutate(output_mean = rollapply(data = gdp_growth, widt = 4*5, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
-  mutate(output_sd = rollapply(data = gdp_growth, width = 4*5, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
-  mutate(ouput_z_score = (GDP_r - output_mean) / output_sd) %>%
+  mutate(gdp_growth = 100 * (GDP / lag(GDP,year_set) - 1)) %>%          
+  mutate(output_mean = rollapply(data = gdp_growth, widt = 4*year_set, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(output_sd = rollapply(data = gdp_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(ouput_z_score = (GDP - output_mean) / output_sd) %>%
   ungroup()
 
-ref_u2 <- outputvol_data %>%
-  filter(ISO2 == "U2") %>%
-  select(Date, output_vol_U2 = output_sd)
+outputvol_data<-  outputvol_data %>%
+  group_by(ISO2) %>%
+  arrange(Date, .by_group = TRUE) %>%
+  mutate(INV_growth = 100 * (INV / lag(INV,year_set) - 1)) %>%    
+  mutate(DEM_growth = 100 * (DEM / lag(DEM,year_set) - 1)) %>% 
+  # mutate(INV_sd = rollapply(data = INV_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  # mutate(DEM_sd = rollapply(data = DEM_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(INV_mean = rollapply(data = INV_growth, width = 4*year_set, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(DEM_mean = rollapply(data = DEM_growth, width = 4*year_set, FUN = mean,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(INV_sd = rollapply(data = INV_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  mutate(DEM_sd = rollapply(data = INV_growth, width = 4*year_set, FUN = sd,align = "right", fill = NA,na.rm = TRUE)) %>%
+  ungroup()
+
+ref_eu <- outputvol_data %>%
+  filter(ISO2 == "I8") %>%
+  select(Date, output_vol_EU = output_sd, INV_vol_EU = INV_sd, DEM_vol_EU = DEM_sd)
+
+ref_eu <- outputvol_data %>%
+  group_by(Date) %>%                                
+  summarise(                                       
+    output_vol_EU = mean(output_sd, na.rm = TRUE),
+    INV_vol_EU    = mean(INV_sd,     na.rm = TRUE),
+    DEM_vol_EU    = mean(DEM_sd,     na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(Date)     
 
 outputvol_data <- outputvol_data %>%
-  left_join(ref_u2, by = "Date") %>%
-  mutate(
-    output_vol_rel = if_else(!is.na(output_vol_U2) & output_vol_U2 != 0,
-                             output_sd / output_vol_U2, 
-                             NA_real_)) %>%
+  left_join(ref_eu, by = "Date") %>%
+  mutate(output_vol_rel = if_else(!is.na(output_vol_EU) & output_vol_EU != 0,output_sd / output_vol_EU, NA_real_)) %>%
+  mutate(INV_vol_rel = if_else(!is.na(INV_vol_EU) & INV_vol_EU != 0,INV_sd / INV_vol_EU, NA_real_)) %>%
+  mutate(DEM_vol_rel = if_else(!is.na(DEM_vol_EU) & DEM_vol_EU != 0,DEM_sd / DEM_vol_EU, NA_real_)) %>%
   arrange(ISO2, Date)
 
 #Plot----------
-
 cbi_palette = c("#0B5471", "#7C477E", "#0083A0", "#5EC5C2", "#D2E288", "#007DC5", "#D12E7C", "#F57D20", "#FCAF17", "#DFCA94", "#000000", "#7e878e")
 iso_levels <- sort(unique(outputvol_data$ISO2))
 pal_all <- setNames(rep(cbi_palette, length.out = length(iso_levels)), iso_levels)
@@ -298,7 +388,7 @@ outputvol_data <- outputvol_data %>%
   mutate(ISO2 = factor(ISO2, levels = iso_levels))
 
 plotdata<- outputvol_data %>% 
-  dplyr::filter(Date >'1995-01-01') 
+  dplyr::filter(Date >'1990-01-01') 
 
 min_d <- floor_date(min(plotdata$Date, na.rm = TRUE), unit = "quarter")
 max_d <- ceiling_date(max(plotdata$Date, na.rm = TRUE), unit = "quarter")
@@ -311,7 +401,7 @@ plot_outputvol<- plotdata %>%
   geom_line(na.rm = TRUE, linewidth = 1.5) +
   labs(
     title = "Output volatility (rolling 8 quarters standard deviation)",
-    x = "Date", y = "Output volatility", color = "Country") +
+    x = "Date", y = "(%)", color = "Country") +
   scale_x_date( date_breaks = "2 years", labels  = label_quarter, limits = c(min_d, max_d),
     expand = expansion(mult = c(0.01, 0.03)))+
   theme_minimal(base_size = 12) +
@@ -331,14 +421,12 @@ plot_outputvol<- plotdata %>%
 ggsave(paste0(path,"/B.Results/Plots/plot_ouputvol.pdf"), plot_outputvol, height = 20, width = 25)
 ggsave(filename = file.path(path, "B.Results/Plots/plot_outputvol.png"),plot= plot_outputvol,height   = 20, width    = 25, dpi      = 300)
 
-plot_outputvol
-
-#Plot relative---
-iso_subset <- c('U2', "IE","IE_GNI",'ES','FR','DE',"GR","BE")
+#Plot relative GNI---
+iso_subset <- c('I8', "IE","IE_GNI",'ES','FR','DE',"GR","BE")
 lty_all <- setNames(rep("solid", length(iso_subset)), iso_subset)
 lty_all["IE_GNI"] <- "dashed"   # o "dotted", "longdash", etc.
 lab_all <- setNames(iso_subset, iso_subset)
-lab_all["U2"] <- "Euro area (changing composition, U2)"
+lab_all["I8"] <- "Euro area (19 countries)"
 
 plot_diff<- plotdata %>% 
   dplyr::filter(ISO2 %in% iso_subset) %>% 
@@ -346,7 +434,7 @@ plot_diff<- plotdata %>%
   geom_line(na.rm = TRUE, linewidth = 1.5) +
   labs(
     title = "Output volatility Relative to Euro Area",
-    x = "Date",y = "Output volatility",color = "Country") +
+    x = "Date",y = "(%)",color = "Country") +
   scale_x_date( date_breaks = "2 years", labels  = label_quarter, limits = c(min_d, max_d),
                 expand = expansion(mult = c(0.01, 0.03)))+
   theme_minimal(base_size = 12) +
@@ -366,5 +454,231 @@ plot_diff<- plotdata %>%
 ggsave(paste0(path,"/B.Results/Plots/plot_relative_ouputvol.pdf"), plot_diff, height = 20, width = 25)
 ggsave(filename = file.path(path, "B.Results/Plots/plot_relative_outputvol.png"),plot     = plot_diff,height   = 20, width    = 25, dpi      = 300)
 
-plot_diff
+#Plot relative Demand---
+iso_subset <- c('I8', "IE",'ES','FR','DE',"GR","CY")
+lty_all <- setNames(rep("solid", length(iso_subset)), iso_subset)
+lty_all["IE"] <- "dashed"   # o "dotted", "longdash", etc.
+lab_all <- setNames(iso_subset, iso_subset)
+lab_all["I8"] <- "Euro area (19 countries)"
+
+plot_diff_dem<- plotdata %>% 
+  dplyr::filter(ISO2 %in% iso_subset) %>% 
+  ggplot(., aes(x = Date, y = DEM_vol_rel, color = ISO2, linetype = ISO2, group = ISO2)) +
+  geom_line(na.rm = TRUE, linewidth = 1.5) +
+  labs(
+    title = "Demand volatility Relative to Euro Area",
+    x = "Date",y = "(%)",color = "Country") +
+  scale_x_date( date_breaks = "2 years", labels  = label_quarter, limits = c(min_d, max_d),
+                expand = expansion(mult = c(0.01, 0.03)))+
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position="bottom",legend.title = element_text(size = 8)) +
+  scale_color_manual(values = pal_all, labels = lab_all) +
+  scale_linetype_manual(values = lty_all, guide = "none") +  
+  guides(color = guide_legend(title = ""))+
+  theme(legend.position = "bottom",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50),
+        axis.text.x       = element_text(angle = 45, hjust = 1, vjust = 1))
+ggsave(paste0(path,"/B.Results/Plots/plot_relative_demvol.pdf"), plot_diff_dem, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/plot_relative_demvol.png"),plot= plot_diff_dem,height   = 20, width    = 25, dpi      = 300)
+
+#Scarlett plots---------------------------------------
+#Scarlett relative Demand---
+scatter_plot_data<- plotdata %>% 
+  mutate(DEM_growth_yoy=DEM/lag(DEM,4)-1) %>% 
+  filter(Date>="1999-1-1") %>% 
+  filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
+  filter(!ISO2 %in% c("IE_GNI", "U2")) %>%  
+  group_by(ISO2) %>%                                
+  summarise(                                       
+    DEM_sd = sd(DEM_growth_yoy, na.rm = TRUE),
+    DEM_growth  = mean(DEM_growth_yoy,     na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(ISO2) 
+
+p_scatter_dem <- ggplot(scatter_plot_data, aes(x = DEM_growth, y = DEM_sd)) +
+  geom_point(aes(color = ISO2), size = 15, alpha = 0.9) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 1.5, color = "grey30") +
+  geom_text_repel(aes(label = ISO2, color = ISO2),
+                  size = 20, max.overlaps = Inf, box.padding = 0.4, point.padding = 0.2, show.legend = FALSE) +
+  scale_color_manual(values = rep(cbi_palette, length.out = dplyr::n_distinct(scatter_plot_data$ISO2))) +
+  labs(
+    title = "Demand volatility vs. demand growth",
+    x = "Demand growth (YoY, %)",
+    y = "Demand volatility (country / EU)",
+    color = "Country"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position = "none",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50))
+p_scatter_dem
+ggsave(paste0(path,"/B.Results/Plots/demand_full.pdf"), p_scatter_dem, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/demand_full.png"),plot= p_scatter_dem,height   = 20, width    = 25, dpi      = 300)
+
+#Pre GFC
+scatter_plot_data<- plotdata %>% 
+  mutate(DEM_growth_yoy=DEM/lag(DEM,4)-1) %>% 
+  filter(Date>="1999-1-1") %>% 
+  filter(Date<="2007-1-1") %>% 
+  filter(!ISO2 %in% c("IE_GNI", "U2")) %>%  
+  group_by(ISO2) %>%                                
+  summarise(                                       
+    DEM_sd = sd(DEM_growth_yoy, na.rm = TRUE),
+    DEM_growth  = mean(DEM_growth_yoy,     na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(ISO2) 
+
+p_scatter_dem <- ggplot(scatter_plot_data, aes(x = DEM_growth, y = DEM_sd)) +
+  geom_point(aes(color = ISO2), size = 15, alpha = 0.9) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 1.5, color = "grey30") +
+  geom_text_repel(aes(label = ISO2, color = ISO2),
+                  size = 20, max.overlaps = Inf, box.padding = 0.4, point.padding = 0.2, show.legend = FALSE) +
+  scale_color_manual(values = rep(cbi_palette, length.out = dplyr::n_distinct(scatter_plot_data$ISO2))) +
+  labs(
+    title = "Demand volatility vs. demand growth (Pre-GFC)",
+    x = "Demand growth (YoY, %)",
+    y = "Demand volatility (country / EU)",
+    color = "Country"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position = "none",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50))
+p_scatter_dem
+ggsave(paste0(path,"/B.Results/Plots/demand_pre_GFC.pdf"), p_scatter_dem, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/demand_pre_GFC.png"),plot= p_scatter_dem,height   = 20, width    = 25, dpi      = 300)
+
+#Post GFC
+scatter_plot_data<- plotdata %>% 
+  mutate(DEM_growth_yoy=DEM/lag(DEM,4)-1) %>% 
+  filter(Date>="2010-1-1") %>% 
+  filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
+  filter(!ISO2 %in% c("IE_GNI", "U2")) %>%  
+  group_by(ISO2) %>%                                
+  summarise(                                       
+    DEM_sd = sd(DEM_growth_yoy, na.rm = TRUE),
+    DEM_growth  = mean(DEM_growth_yoy,     na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(ISO2) 
+p_scatter_dem <- ggplot(scatter_plot_data, aes(x = DEM_growth, y = DEM_sd)) +
+  geom_point(aes(color = ISO2), size = 15, alpha = 0.9) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 1.5, color = "grey30") +
+  geom_text_repel(aes(label = ISO2, color = ISO2),
+                  size = 20, max.overlaps = Inf, box.padding = 0.4, point.padding = 0.2, show.legend = FALSE) +
+  scale_color_manual(values = rep(cbi_palette, length.out = dplyr::n_distinct(scatter_plot_data$ISO2))) +
+  labs(
+    title = "Demand volatility vs. demand growth (Post-GFC)",
+    x = "Demand growth (YoY, %)",
+    y = "Demand volatility (country / EU)",
+    color = "Country"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position = "none",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50))
+p_scatter_dem
+ggsave(paste0(path,"/B.Results/Plots/demand_post_GFC.pdf"), p_scatter_dem, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/demand_post_GFC.png"),plot= p_scatter_dem,height   = 20, width    = 25, dpi      = 300)
+
+#Scarlett relative Output---
+scatter_plot_data<- plotdata %>% 
+  mutate(Output_growth_yoy=GDP/lag(GDP,4)-1) %>% 
+  filter(Date>="1999-1-1") %>%
+  filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
+  filter(!ISO2 %in% c("U2")) %>%  
+  group_by(ISO2) %>%                                
+  summarise(                                       
+    output_sd = mean(output_sd, na.rm = TRUE),
+    Output_growth_yoy  = mean(Output_growth_yoy,na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(ISO2) 
+
+p_scatter_GDP <- ggplot(scatter_plot_data, aes(x = Output_growth_yoy, y = output_sd)) +
+  geom_point(aes(color = ISO2), size = 15, alpha = 0.9) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 1.5, color = "grey30") +
+  geom_text_repel(aes(label = ISO2, color = ISO2),
+                  size = 20, max.overlaps = Inf, box.padding = 0.4, point.padding = 0.2, show.legend = FALSE) +
+  scale_color_manual(values = rep(cbi_palette, length.out = dplyr::n_distinct(scatter_plot_data$ISO2))) +
+  labs(
+    title = "Output volatility vs. Output growth",
+    x = "Output growth (YoY, %)",
+    y = "Output volatility (country / EU)",
+    color = "Country"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position = "none",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50))
+
+p_scatter_GDP
+
+ggsave(paste0(path,"/B.Results/Plots/gdp_scatter.pdf"), p_scatter_GDP, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/gdp_scatter.png"),plot= p_scatter_GDP,height   = 20, width    = 25, dpi      = 300)
+
+#Scarlett relative Investment---
+scatter_plot_data<- plotdata %>% 
+  mutate(INV_growth_yoy=INV/lag(INV,4)-1) %>% 
+  filter(Date>="2000-1-1") %>% 
+  filter(!between(Date, as.Date("2020-01-01"), as.Date("2021-01-01")))%>%
+  filter(!ISO2 %in% c("U2")) %>%  
+  group_by(ISO2) %>%                                
+  summarise(                                       
+    INV_sd = mean(output_sd, na.rm = TRUE),
+    INV_growth_yoy  = mean(INV_growth_yoy,     na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(ISO2) 
+
+p_scatter_inv <- ggplot(scatter_plot_data, aes(x = INV_growth_yoy, y = INV_sd)) +
+  geom_point(aes(color = ISO2), size = 15, alpha = 0.9) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 1.5, color = "grey30") +
+  geom_text_repel(aes(label = ISO2, color = ISO2),
+                  size = 20, max.overlaps = Inf, box.padding = 0.4, point.padding = 0.2, show.legend = FALSE) +
+  scale_color_manual(values = rep(cbi_palette, length.out = dplyr::n_distinct(scatter_plot_data$ISO2))) +
+  labs(
+    title = "Investment volatility vs. Investment growth",
+    x = "Investment growth (YoY, %)",
+    y = "Investment volatility (country / EU)",
+    color = "Country"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "grey"))+
+  theme(legend.position = "none",
+        plot.title = element_text(size = 50),
+        axis.text=element_text(size=50),
+        axis.title=element_text(size=50),
+        legend.text =element_text(size=50))
+
+p_scatter_inv
+
+ggsave(paste0(path,"/B.Results/Plots/inv_scatter.pdf"), p_scatter_inv, height = 20, width = 25)
+ggsave(filename = file.path(path, "B.Results/Plots/inv_scatter.png"),plot= p_scatter_inv,height   = 20, width    = 25, dpi      = 300)
+
 
