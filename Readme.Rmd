@@ -1,0 +1,39 @@
+# 📊 Reproducible Code for the Assesment  
+**Box __: Output volatility Dynamics**  
+Published in: *Financial Stability Report, Central Bank of Ireland*, Quarter [q], Year [yyyy]  
+
+# 💻 📑 Code Authors  
+This repository and all accompanying code were produced by:
+- **Dr. Farah Mugrabi** (Université catholique de Louvain)
+
+# 📬 Correspondence  
+- 📧 [farah.mugrabi@uclouvain.be](mailto:farah.mugrabi@uclouvain.be)  
+- 🌐 [www.farahmugrabi.com](http://www.farahmugrabi.com)  
+
+# 🧠 About  
+- This repository contains **fully reproducible codes** for the assesment above.  
+
+# ✏️ Citation  
+If you use this code, please cite both the GitHub repository and the related article:  
+- **GitHub repository** 
+  -Mugrabi, F. (202_). *Output volatility Dynamics*. GitHub. https://github.com/farahmugrabi/output_volatility  
+- **Articles** 
+  - CBI (2025Q_). *Financial Stability Report. Central Bank of Ireland*, Quarter [q], Year [yyyy] 
+
+# 📦 Requirements 
+- Code tested under **R version 4.5.1 (2025-06-13 ucrt)**.  
+- Please install the required R packages: install.packages(c("dplyr","lubridate","DisaggregateTS","zoo","csodata","ggplot2","ecb","openxlsx","stringr","RJDemetra","vars","urca","mnormt","tseriesChaos","tsDyn","bvartools","tidyverse","readr","readxl","writexl","data.table","xlsx","tseries","mFilter","ggpubr","countrycode","hpfilter","pROC","qpcR","janitor","fbroc","ipred","lava","recipes","caret","gridExtra","mvtnorm","MASS","car","matrixcalc","viridis","ggridges","LaplacesDemon","tidyr","forecast"))
+
+# 📂 Download & Structure  
+Please download the following folders and scripts. The files and directories are the following:
+
+
+# ⚙️ Instructions:
+1. Download the full folder, do not change the location of the files or names.
+2. Follow @ to locate configurable options.
+3. Run ▶️ the scripts in the following order:
+  - B.Data/0.Data.R
+  - A.Main_Code/GF3_S23_US_FIX_DYN_pars
+  - C.Properties/C1.Bank_crisis.R
+  - C.Properties/C2.Properties.R
+5. Notes 📝:
