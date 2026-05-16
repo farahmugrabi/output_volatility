@@ -19,7 +19,7 @@ This repository and all accompanying code were produced by:
 - Additional figures are descriptive and used to document the underlying data patterns.
 
 # 📊 Main Chart
-![Output volatility scatter plot](B.Results/Plots/output_volatility_scatter.png)
+![Output volatility scatter plot](B.Results/Plots/gdp_scatter.png)
 
 # 📦 Requirements 
 - Code tested under **R version 4.5.1 (2025-06-13 ucrt)**.  
