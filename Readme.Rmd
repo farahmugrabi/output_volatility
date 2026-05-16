@@ -18,6 +18,9 @@ This repository and all accompanying code were produced by:
 - Main results are reported in the scatter plots.
 - Additional figures are descriptive and used to document the underlying data patterns.
 
+# 📊 Main Chart
+![Output volatility scatter plot](B.Results/Plots/output_volatility_scatter.png)
+
 # 📦 Requirements 
 - Code tested under **R version 4.5.1 (2025-06-13 ucrt)**.  
 - Please install the required R packages: install.packages(c("dplyr","lubridate","DisaggregateTS","zoo","csodata","ggplot2","ecb","openxlsx","stringr","writexl", "forecast","countrycode", "ggrepel"))
