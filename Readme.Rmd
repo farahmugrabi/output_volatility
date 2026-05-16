@@ -20,6 +20,7 @@ This repository and all accompanying code were produced by:
 
 # 📊 Main Chart
 ![GDP scatter](B.Results/Plots/gdp_scatter.png)
+<img src="./B.Results/Plots/gdp_scatter.png" width="700">
 
 # 📦 Requirements 
 - Code tested under **R version 4.5.1 (2025-06-13 ucrt)**.  
