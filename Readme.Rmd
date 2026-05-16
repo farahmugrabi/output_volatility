@@ -20,6 +20,7 @@ This repository and all accompanying code were produced by:
 
 # 📊 Main Chart
 <img src="https://raw.githubusercontent.com/farahmugrabi/output_volatility/master/B.Results/Plots/gdp_scatter.png" width="700">
+The plot shows European countries by output growth and output volatility. Countries to the right of the 45-degree line combine higher GDP growth with lower output volatility.
 
 # 📦 Requirements 
 - Code tested under **R version 4.5.1 (2025-06-13 ucrt)**.  
