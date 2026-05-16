@@ -1,6 +1,6 @@
 # 📊 Reproducible Code for the Assesment  
 **Box __: Output volatility Dynamics**  
-Published in: *Financial Stability Report, Central Bank of Ireland*, Quarter [q], Year [yyyy]  
+Published in: *Financial Stability Report, Central Bank of X*, Quarter [q], Year [yyyy]  
 
 # 💻 📑 Code Authors  
 This repository and all accompanying code were produced by:
