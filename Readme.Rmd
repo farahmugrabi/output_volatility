@@ -11,7 +11,12 @@ This repository and all accompanying code were produced by:
 - 🌐 [www.farahmugrabi.com](http://www.farahmugrabi.com)  
 
 # 🧠 About  
-- This repository contains **fully reproducible codes** for the assessment above.  
+- This repository contains **fully reproducible codes** for the assessment above. 
+
+# 📈 Results  
+- Output files are automatically saved in the `B.Results/Plots` folder.
+- Main results are reported in the scatter plots.
+- Additional figures are descriptive and used to document the underlying data patterns.
 
 # 📦 Requirements 
 - Code tested under **R version 4.5.1 (2025-06-13 ucrt)**.  
